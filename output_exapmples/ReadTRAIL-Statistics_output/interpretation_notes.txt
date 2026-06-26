@@ -1,0 +1,91 @@
+========================================================================
+MLVA/VNTR Pipeline v21 — Interpretation Notes
+========================================================================
+
+This file explains the meaning of key output columns, in particular
+why Idealized_Share_% and Experimental_Share_% are NOT confidence scores.
+
+────────────────────────────────────────────────────────────────────────
+Q1.  Is Idealized_Share_% a "% of reliability / confidence"
+     for the idealized model?
+────────────────────────────────────────────────────────────────────────
+
+SHORT ANSWER: No.
+
+Idealized_Share_% is the RELATIVE SHARE (proportion) of this allele
+within a specific locus for a specific sample, computed under the
+idealized (theoretical coverage) model.
+
+Formula:
+    Idealized_Share_% = Q_i / Σ(Q_j for all alleles j in the same locus) × 100
+    where Q_i = Raw_Count / E_ideal  (E_ideal = C_mini · p_i)
+
+What it tells you:
+  • Idealized_Share_% ≈ 100 %  →  single meaningful allele (dominant or mono).
+  • Idealized_Share_% < 100 %  →  secondary alleles present; value = their
+    proportional contribution (proxy for contamination / mixture fraction).
+  • For secondary alleles: how large their relative signal is compared to
+    the dominant allele, after correcting for detectability differences.
+
+What it does NOT tell you:
+  • Whether the idealized model fit is trustworthy.
+  • Whether Q_i was computed from a complete allele denominator.
+  • Whether the locus has dropout or unobservable alleles hidden from the sum.
+
+────────────────────────────────────────────────────────────────────────
+Q2.  Is Experimental_Share_% a "% of reliability / confidence"
+     for the experimental model?
+────────────────────────────────────────────────────────────────────────
+
+SHORT ANSWER: No.
+
+Experimental_Share_% is the RELATIVE SHARE of this allele within a locus
+after a two-step empirical normalization.
+
+Formula:
+    Q_i_sample_adjusted = Q_i / B_sample
+    Q_i_experimental    = Q_i_sample_adjusted / B_locus_cohort
+                          (fallback = Q_i_sample_adjusted if no cohort baseline)
+    Experimental_Share_% = Q_i_experimental / Σ(Q_j_experimental in locus) × 100
+
+What it tells you:
+  • An empirically bias-corrected view of allele proportion.
+  • Accounts for sample-level coverage bias (B_sample) and cohort-level
+    locus bias (B_locus_cohort).
+  • Secondary alleles with significant Experimental_Share_% after both
+    correction steps are stronger evidence of true mixture / contamination.
+
+What it does NOT tell you:
+  • If Sample_Baseline_Reliable = False or Locus_Cohort_Baseline_Reliable
+    = False, the normalization is approximate — interpret with caution.
+
+────────────────────────────────────────────────────────────────────────
+Key conceptual difference between the two metrics
+────────────────────────────────────────────────────────────────────────
+
+Idealized_Share_%     — proportion after THEORETICAL correction
+                        (mini-genome coverage model; no empirical calibration).
+
+Experimental_Share_%  — proportion after EMPIRICAL two-step normalization:
+                        (1) sample-level baseline B_sample,
+                        (2) cohort locus baseline B_locus_cohort.
+
+Neither metric is a confidence / reliability score.
+Both are REPRESENTATIONAL metrics: what fraction of the locus signal
+comes from this allele under a given normalization model.
+
+────────────────────────────────────────────────────────────────────────
+Columns that DO reflect reliability / quality of the result
+────────────────────────────────────────────────────────────────────────
+
+  Denominator_Complete           True if no unobservable/hidden alleles
+                                 inflate the share denominator.
+  Denominator_Issue_Type         NONE / UNOBSERVABLE / LOW_COMPLETENESS / MIXED.
+  Confidence_Score_Locus         Upstream per-locus confidence score.
+  Sample_Baseline_Reliable       True if B_sample was built from
+                                 ≥ 5 clean monoallelic loci.
+  Locus_Cohort_Baseline_Reliable True if B_locus_cohort was built from
+                                 ≥ 5 cohort observations.
+  Is_Clean_Monoallelic_Locus     True = safest, unambiguous single allele.
+
+========================================================================

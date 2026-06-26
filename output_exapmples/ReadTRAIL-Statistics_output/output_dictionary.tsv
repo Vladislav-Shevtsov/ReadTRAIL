@@ -1,0 +1,59 @@
+Column_Name	Sheet	Definition	Formula
+Sample_ID	allele,locus,sample	Sample identifier	from input
+Access_Number	allele,locus,sample	FASTQ accession number	from input
+Locus_ID	allele,locus	Full locus identifier	from input (Primer column)
+Locus_Name	allele,locus	Short locus name	split('_')[0] of Locus_ID
+Repeat_Descriptor	allele	Repeat unit descriptor	split('_')[1] of Locus_ID
+Reference_Fragment_Label	allele	Reference fragment length label	split('_')[2] of Locus_ID
+Reference_Allele_Label	allele	Reference allele label	split('_')[3] of Locus_ID
+Allele_Rank_Input	allele	Ordinal position of allele in wide-format input	direct
+Allele_Value	allele,locus	Allele value (repeat units)	from input
+Raw_Count	allele,locus	Number of reads assigned to this allele	direct from input
+Fragment_Length_bp	allele	Amplicon length in bp	from input (Loci_Size)
+Mean_Read_Length_bp	allele	Mean sequencing read length for the sample in bp	from input (Mean_Read_Length)
+p_i	allele	Per-read detectability probability	p_star if present else max(0, (R - L + 1)/R); 0 if L>R
+Detectability_Class	allele	Observable / Marginal / Effectively_Unobservable / Unobservable	from input
+N_filt	allele,sample	Sum of Raw_Count over all detected alleles of the sample	Σ Raw_Count per sample
+G_mini	allele,sample	Sum of Fragment_Length over all detected alleles	Σ Fragment_Length_bp per sample
+C_mini	allele,sample	Mini-genome coverage	C_mini = N_filt · R / G_mini
+E_ideal	allele	Idealized expected reads (no length multiplier)	E_ideal = C_mini · p_i
+Q_i	allele	Idealized ratio	Q_i = Raw_Count / E_ideal
+Idealized_Share_%	allele	Allele share within locus by idealized model	Q_i / Σ(Q_j in locus) · 100
+Is_Clean_Monoallelic_Locus	allele,locus	Locus has exactly 1 detected allele with Raw_Count>0, p_i>0, not unobservable, not in dropout set	combined flag
+B_sample	allele,sample	Sample baseline	median(Q_i over clean monoallelic loci of sample)
+Sample_Baseline_Reliable	allele,sample	True if ≥5 clean monoallelic loci contributed	N_clean ≥ 5
+Q_i_sample_adjusted	allele	Sample-adjusted idealized ratio	Q_i / B_sample
+B_locus_cohort	allele	Cohort locus baseline	median(Q_i_sample_adjusted over clean monoallelic observations of the locus across samples)
+Locus_Cohort_Baseline_Reliable	allele	True if ≥5 observations	N_obs ≥ 5
+Experimental_Cohort_Adjustment_Applied	allele	True if cohort baseline was applied (not fallback)	B_locus_cohort present and positive
+Q_i_experimental	allele	Final experimental ratio	Q_i_sample_adjusted / B_locus_cohort; fallback = Q_i_sample_adjusted
+Experimental_Share_%	allele	Allele share within locus by experimental model	Q_i_experimental / Σ(..) · 100
+Is_Unobservable	allele	"True if p_i≤0 or Detectability_Class==""Unobservable"""	derived
+Incomplete_Denominator	allele,locus	True if hidden allele with significant expected signal	from input
+Denominator_Complete	allele,locus	True if no denominator issue (UNOBSERVABLE/LOW_COMPLETENESS)	issue_type == NONE
+Denominator_Issue_Type	allele,locus	NONE / UNOBSERVABLE / LOW_COMPLETENESS / MIXED	rule: unobs + (incompl OR hidden>threshold)
+Dropout_Adjusted_Status	allele	Locus dropout-aware status	from input
+N_Alleles_Detected	locus	Number of detected alleles at locus in sample	grp size
+Total_Raw_Count	locus	Sum of Raw_Count across locus alleles	Σ Raw_Count
+Total_Q_i	locus	Sum of Q_i across locus alleles	Σ Q_i
+Total_Q_i_experimental	locus	Sum of Q_i_experimental across locus alleles	Σ Q_i_experimental
+Dominant_Allele_By_Qi	locus	Allele with max Q_i	argmax Q_i
+Dominant_Allele_By_Experimental	locus	Allele with max Q_i_experimental	argmax Q_i_experimental
+Dominant_Idealized_Share_%	locus	Idealized_Share_% of dominant-by-Q_i allele	lookup
+Dominant_Experimental_Share_%	locus	Experimental_Share_% of dominant-by-Exp allele	lookup
+Has_Unobservable_Alleles	locus	True if any allele Is_Unobservable	any(Is_Unobservable)
+Hidden_Allele_Flag	allele	True when allele is physically undetectable (p_i ≤ 0 or Detectability_Class = Unobservable). Biologically: allele may exist but is invisible to sequencing reads due to amplicon length > read length.	p_i ≤ 0 OR Detectability_Class == Unobservable
+Hidden_Component_Pct	allele	Percentage of allele signal lost due to detectability constraints: (1 − p_i) × 100. Range 0–100. 0 = fully observed; 100 = completely undetectable. NOT used in Q_i calculation — QC/interpretation only.	(1 − p_i) × 100; NaN p_i → 100
+Mean_Hidden_Component_Pct	locus	Mean Hidden_Component_Pct over all alleles in the locus	mean(Hidden_Component_Pct)
+Max_Hidden_Component_Pct	locus	Max Hidden_Component_Pct over all alleles in the locus	max(Hidden_Component_Pct)
+Potential_Hidden_Allele	locus	True if locus shows evidence of one or more hidden (undetectable) alleles. Triggered by: Max_Hidden_Component_Pct > 50, OR Has_Unobservable_Alleles, OR Denominator_Issue_Type != NONE, OR Incomplete_Denominator.	cond_high_hidden OR cond_unobservable OR cond_denom_issue OR cond_incomplete
+Hidden_Allele_Evidence_Score	locus	Composite score 0–1 estimating probability that a hidden allele is present. Score = 0.5×mean(HCP/100) + 0.25 if unobservable + 0.15 if denom issue + 0.10 if incomplete denominator.	0.5×mean_hcp/100 + 0.25×unobs + 0.15×denom_issue + 0.10×incomplete; capped at 1.0
+N_Loci_Potential_Hidden_Allele	sample	Number of loci with Potential_Hidden_Allele = True	count(Potential_Hidden_Allele)
+Potential_Mixture_Flag	sample	True if the sample shows evidence of mixture — either observed multi-allelic loci OR loci with Potential_Hidden_Allele. Critical: False does NOT guarantee a pure sample.	has_observed_multi OR N_Loci_Potential_Hidden_Allele > 0
+Mixture_Type	sample	Classification of mixture evidence: CLEAN_SINGLE = no multi-allelic and no hidden allele evidence; OBSERVED_MIX = visible multi-allelic loci detected; HIDDEN_MIX = no visible multi-allelic but hidden allele evidence present; AMBIGUOUS = both observed and hidden signals present.	classification rule on has_observed_multi + has_hidden_loci
+N_Loci_Total	sample	Total number of loci reported for the sample	count
+N_Clean_Monoallelic_Loci	sample	Clean monoallelic loci count	Σ Is_Clean_Monoallelic_Locus
+N_Loci_With_Cohort_Baseline	sample	Loci where cohort baseline applied	Σ cohort_applied
+N_Loci_Without_Cohort_Baseline	sample	Loci with sample-only fallback	total − with_cohort
+N_Loci_With_Unobservable_Alleles	sample	Loci carrying any unobservable allele	Σ Has_Unobservable_Alleles
+N_Loci_Incomplete_Denominator	sample	Loci with Incomplete_Denominator flag	Σ Incomplete_Denominator

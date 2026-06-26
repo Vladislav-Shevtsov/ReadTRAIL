@@ -1,0 +1,59 @@
+================================================================
+MLVA/VNTR Pipeline v21 — Run Metadata
+================================================================
+Pipeline version               : 21.1.0
+Run date/time                  : 2026-06-26 12:47:54
+Input file                     : /Users/vladislav/Documents/READ_TRAIL/MLVA_analysis_input_mix_11_05.xlsx
+Output directory               : /Users/vladislav/Documents/READ_TRAIL/output
+Max alleles per locus          : 4
+Samples processed              : 11
+Sample-locus records           : 263
+Samples with reliable B_sample : 11
+Loci with reliable B_locus_cohort : 18
+
+Thresholds:
+  MIN_ALLELE_SUPPORT                    = 1
+  MIN_CLEAN_MONOALLELIC_FOR_SAMPLE      = 5
+  MIN_CLEAN_MONOALLELIC_FOR_LOCUS       = 5
+  HIDDEN_COMPONENT_THRESHOLD            = 30.0
+  EXCLUDE_DROPOUT_STATUSES              = ['PARTIALLY_UNOBSERVABLE_MIXTURE', 'POTENTIAL_ALLELE_DROPOUT', 'UNRESOLVED_DUE_TO_DETECTABILITY']
+
+Formulas (v21):
+  N_filt   definition            = sum(Raw_Count over all detected alleles of sample)
+  G_mini   definition            = sum(Fragment_Length_bp over all detected alleles of sample)
+  C_mini   definition            = N_filt · R / G_mini, where R = Mean_Read_Length_bp
+  p_i      definition            = p_star if available else max(0, (R - L + 1)/R); 0 if L>R
+  E_ideal  formula               = C_mini · p_i      (NO length multiplier)
+  Q_i      formula               = Raw_Count / E_ideal
+  B_sample formula               = median(Q_i over clean monoallelic loci of sample)
+  Q_i_sample_adjusted formula    = Q_i / B_sample
+  B_locus_cohort formula         = median(Q_i_sample_adjusted over clean monoallelic observations of same locus across samples)
+  Q_i_experimental formula       = Q_i_sample_adjusted / B_locus_cohort  (fallback: Q_i_experimental = Q_i_sample_adjusted if B_locus_cohort missing)
+  Idealized_Share_%  formula     = Q_i / Σ(Q_j in locus) · 100
+  Experimental_Share_% formula   = Q_i_experimental / Σ(..) · 100
+
+Clean monoallelic locus definition:
+  Exactly 1 detected allele in the locus for the sample, AND
+  Raw_Count > 0 AND p_i > 0 AND Is_Unobservable == False AND
+  Dropout_Adjusted_Status NOT IN EXCLUDE_DROPOUT_STATUSES.
+
+Removed in this version vs. v20:
+  - Q_e (experimental ratio via old per-locus B_locus)
+  - Old B_locus (median Q_i within locus used as bias)
+  - Integrated_Mass, Integrated_Percent, Sample_Percent
+  - Major_Allele_Reliability_Pct, Minor_to_Major_Ratio
+  - Legacy Idealized_Support = Raw / p_star
+  - All plot-ready columns (Plot_*) and plots_experimental_idealized.html
+
+Output files:
+  master_allele_to_sample_statistics.xlsx
+  publication_tables.xlsx
+  output_dictionary.tsv
+  run_metadata.txt
+  interpretation_notes.txt
+  hidden_allele_interpretation.txt
+  plots_idealized_share.html          (per-sample idealized, requires plotly)
+  all_samples_idealized_alleles.html  (all-samples idealized, requires plotly)
+  plots_experimental_share.html       (per-sample experimental, requires plotly)
+  all_samples_experimental_alleles.html (all-samples experimental, requires plotly)
+================================================================

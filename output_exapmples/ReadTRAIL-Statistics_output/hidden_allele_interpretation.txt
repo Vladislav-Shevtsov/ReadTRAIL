@@ -1,0 +1,138 @@
+========================================================================
+MLVA/VNTR Pipeline v21 — Hidden Allele Interpretation Guide
+========================================================================
+
+─── CORE CONCEPT ──────────────────────────────────────────────────────
+
+In NGS-based MLVA/VNTR analysis, an allele can be ABSENT FROM THE DATA
+without being absent from the biological sample.
+
+This happens when the PCR amplicon for that allele is LONGER than the
+sequencing read length (e.g. amplicon = 350 bp, read = 150 bp).
+
+In that case:
+  p_i  ≈ 0   →   detectability probability approaches zero
+  E_ideal = C_mini × p_i  ≈ 0   →   expected reads ≈ 0
+  Raw_Count observed  ≈ 0   →   allele appears absent in output
+
+CRITICAL DISTINCTION:
+  ❌  "Allele not in data"  ≠  "Allele not in sample"
+  ✅  "Allele not in data with p_i ≈ 0"  =  "Allele likely present
+       but physically undetectable with current read length"
+
+─── FORMULAS ──────────────────────────────────────────────────────────
+
+Hidden_Allele_Flag:
+  True  if  p_i ≤ 0  OR  Detectability_Class == "Unobservable"
+  Signals: this allele exists in the marker profile but CANNOT be
+  reliably sequenced.
+
+Hidden_Component_Pct:
+  (1 − p_i) × 100   [clamped 0–100%]
+
+  Meaning:
+    0 %   → allele is FULLY OBSERVABLE (short amplicon, high p_i)
+   30 %   → 30 % of allele signal is "hidden" by detectability loss
+  100 %   → allele is COMPLETELY UNDETECTABLE (p_i = 0)
+
+  Note: Hidden_Component_Pct does NOT enter into any Q_i or
+  share calculation — it is a DIAGNOSTIC METRIC ONLY.
+
+─── LOCUS-LEVEL FLAGS ─────────────────────────────────────────────────
+
+Potential_Hidden_Allele (locus_level):
+  True when any of these conditions are met:
+  A)  Max_Hidden_Component_Pct > 50 %
+      → at least one allele in the locus is mostly undetectable
+  B)  Has_Unobservable_Alleles == True
+      → at least one allele explicitly flagged Is_Unobservable
+  C)  Denominator_Issue_Type != NONE
+      → UNOBSERVABLE / LOW_COMPLETENESS / MIXED issue present
+  D)  Incomplete_Denominator == True
+      → upstream pipeline flagged the denominator as incomplete
+
+Hidden_Allele_Evidence_Score (0–1):
+  Composite score estimating the probability of a hidden allele.
+  Higher = stronger evidence.
+  Formula:
+    score = 0.50 × mean(Hidden_Component_Pct) / 100
+          + 0.25  [if any allele Is_Unobservable]
+          + 0.15  [if Denominator_Issue_Type != NONE]
+          + 0.10  [if Incomplete_Denominator == True]
+    score = min(1.0, score)
+
+─── SAMPLE-LEVEL MIXTURE CLASSIFICATION ───────────────────────────────
+
+Mixture_Type values:
+
+  CLEAN_SINGLE   — No multi-allelic loci AND no Potential_Hidden_Allele.
+                   Consistent with a pure single-strain sample.
+                   ⚠ Does not PROVE purity — hidden alleles with
+                   p_i = 0 leave no trace at all.
+
+  OBSERVED_MIX   — At least one locus has N_Alleles_Detected > 1.
+                   Mixture is directly visible in the data.
+
+  HIDDEN_MIX     — No visible multi-allelic loci, BUT at least one
+                   locus has Potential_Hidden_Allele = True.
+                   The mix is biologically plausible but the
+                   secondary allele cannot be observed directly.
+                   Example: ft18 + ft29 mixture where the ft29-
+                   specific m3 allele is too long to sequence.
+
+  AMBIGUOUS      — Both observed multi-allelic loci AND hidden allele
+                   evidence present. Complex mixture — requires
+                   manual review.
+
+─── BIOLOGICAL EXAMPLE: ft18 vs ft29 ─────────────────────────────────
+
+Consider a mixed infection of two F. tularensis strains:
+  • Strain ft18: does NOT carry allele m3
+  • Strain ft29: DOES carry allele m3, but the m3 amplicon is
+                 ~ 350 bp while the sequencing read is 150 bp.
+
+In a ft18+ft29 mixture:
+  1. m3 allele exists in the sample (from ft29)
+  2. p_i(m3) ≈ 0  →  Expected_Reads ≈ 0
+  3. Sequencer produces 0 reads for m3
+  4. Naïve script: "m3 absent → sample looks like ft18 only"
+  5. This pipeline: Potential_Hidden_Allele = True for locus m3
+                    Mixture_Type = HIDDEN_MIX
+
+The Mixture_Type = HIDDEN_MIX flag triggers additional scrutiny,
+preventing misidentification of the mixed sample as pure ft18.
+
+─── HOW TO USE THESE RESULTS ──────────────────────────────────────────
+
+  1. Filter locus_level WHERE Potential_Hidden_Allele = True
+     → identify loci that warrant caution in interpretation.
+
+  2. Check sample_level Mixture_Type:
+     CLEAN_SINGLE → likely pure, but verify Hidden_Allele_Evidence_Score
+     OBSERVED_MIX → mixture confirmed by visible data
+     HIDDEN_MIX   → potential hidden mixture, increase read length
+                    or use long-read sequencing to resolve
+     AMBIGUOUS    → complex case, manual expert review required
+
+  3. To resolve HIDDEN_MIX: increase sequencing read length so that
+     Fragment_Length_bp ≤ Mean_Read_Length_bp for all alleles,
+     thereby raising p_i above 0.
+
+========================================================================
+
+─── PER-SAMPLE MIXTURE SUMMARY ────────────────────────────────────
+
+  Sample_ID                                Mixture_Type    N_Hidden_Loci   Pot_Mix
+  ──────────────────────────────────────── ────────────── ────────────── ────────
+  F-tul-med-18_S22_L001                    AMBIGUOUS       3               True
+  F-tul-med-29_S26_L001                    AMBIGUOUS       4               True
+  F-tul-med-2_S27_L001                     AMBIGUOUS       4               True
+  Ft-mix-1_S9_L001                         AMBIGUOUS       4               True
+  Ft-mix-2_S11_L001                        AMBIGUOUS       11              True
+  Ft-mix-3_S13_L001                        AMBIGUOUS       10              True
+  Ft-mix-4_S12_L001                        AMBIGUOUS       8               True
+  Ft-mix-5_S10_L001                        AMBIGUOUS       11              True
+  SRR1361750311                            AMBIGUOUS       10              True
+  SRR1361750967                            AMBIGUOUS       11              True
+  SRR1361754017                            AMBIGUOUS       11              True
+
