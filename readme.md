@@ -2,8 +2,8 @@
 
 ReadTRAIL is a two-step MLVA/VNTR analysis workflow:
 
-1. `ReadTRAIL-Inference.py` processes FASTQ files, filters reads with BBDuk, applies strict primer validation, and writes MLVA analysis tables.
-2. `ReadTRAIL-Statistics.py` builds allele/locus/sample statistics, publication tables, interpretation notes, and optional Plotly HTML plots.
+1. `ReadTRAIL-Inference_v2.py` processes FASTQ files, filters reads with BBDuk, applies strict primer validation, and writes MLVA analysis tables.
+2. `ReadTRAIL-Statistics_v2.py` builds allele/locus/sample statistics, publication tables, interpretation notes, and optional Plotly HTML plots.
 
 ## Requirements
 
@@ -56,7 +56,7 @@ VNTR12_6bp_238bp_14U    GCTTACGACATCGTTGACAA    TCGATGGTACGCTTCTTGAT
 ## Inference Usage
 
 ```bash
-python ReadTRAIL-Inference.py \
+python ReadTRAIL-Inference_v2.py \
   -i /path/to/fastq_directory \
   -o /path/to/inference_output \
   -p /path/to/primers.txt \
@@ -91,7 +91,7 @@ FASTQ naming examples supported by the inference script:
 Use the MLVA analysis workbook or CSV produced by inference:
 
 ```bash
-python ReadTRAIL-Statistics.py \
+python ReadTRAIL-Statistics_v2.py \
   -i /path/to/inference_output/MLVA_analysis_fastq.xlsx \
   -o /path/to/statistics_output
 ```
