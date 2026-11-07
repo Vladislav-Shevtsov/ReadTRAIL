@@ -402,6 +402,17 @@ def population_detectability(fragment_len, length_hist, bin_width=READ_LEN_BIN):
 # Idealized Model v2 — core functions
 # =============================================================================
 
+def _init_worker_thresholds(p_min, obs_threshold, max_weight):
+    """Copy CLI detectability thresholds into a worker process.
+
+    main() sets P_MIN / OBS_THRESHOLD / MAX_WEIGHT as module globals. Worker
+    processes inherit them only under the 'fork' start method; under 'spawn'
+    (macOS, Windows) the module is re-imported and the defaults would be used.
+    """
+    global P_MIN, OBS_THRESHOLD, MAX_WEIGHT
+    P_MIN, OBS_THRESHOLD, MAX_WEIGHT = p_min, obs_threshold, max_weight
+
+
 def compute_detectability(fragment_len, read_len, p_min=P_MIN):
     """
     Compute detectability for a SINGLE read of length read_len.
@@ -1474,7 +1485,9 @@ def process_chunk(records, primers, nbmismatch, contig, binning, sequence_prefix
         # -- End sizeU --------------------------------------------------------
 
         # ── Idealized Model v2 — detectability & corrected weight (unchanged) ─
-        p_star, det_class, use_in_idealized = compute_detectability(size, read_len)
+        # p_min passed explicitly: the default argument is bound at definition
+        # time, so without it --p-min never reached the per-read classes.
+        p_star, det_class, use_in_idealized = compute_detectability(size, read_len, P_MIN)
 
         corrected_weight = 0.0
         if use_in_idealized and p_star > 0:
@@ -2266,7 +2279,9 @@ def main():
     # `except: break`, so a sample could vanish without an error.
     all_outputs = []
     failed_samples = []
-    with ProcessPoolExecutor(max_workers=max_processes) as executor:
+    with ProcessPoolExecutor(max_workers=max_processes,
+                             initializer=_init_worker_thresholds,
+                             initargs=(P_MIN, OBS_THRESHOLD, MAX_WEIGHT)) as executor:
         future_to_sample = {
             executor.submit(
                 run, sample_name, file_paths, Primers, round_val, nb_mismatch, threads,
@@ -2433,7 +2448,8 @@ def main():
         allele_counts = res['allele_counts'] or {}
         mean_read_len = res['input_mean_len']
         baseline_val, n_loci, method = compute_baseline(
-            allele_counts, res['locus_repr_size'] or {}, mean_read_len)
+            allele_counts, res['locus_repr_size'] or {}, mean_read_len,
+            p_min=P_MIN)
 
         if method == "sample_median" and baseline_val is not None:
             cohort_baselines.append(baseline_val)
